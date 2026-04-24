@@ -2,16 +2,6 @@
 title: "Dynamic Pair Tracking: Standard vs. Robust Kalman Filters"
 author: "Igor Papuc"
 date: "2026-04-24"
-format:
-  html:
-    theme:
-      light: cosmo
-      dark: darkly
-    toc: true
-    code-fold: true
-    code-summary: "Show the code"
-    self-contained: true
-    html-math-method: katex
 ---
 
 ## Introduction: Why Kalman Filters for Pairs?

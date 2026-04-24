@@ -6,7 +6,8 @@ website:
   title: "Market Experiments"
   navbar:
     left:
-      - href: index.qmd
+      - href: regimes.qmd
+        text: Home
       - text: Projects
         menu:
           - href: regimes.qmd
@@ -14,11 +15,9 @@ website:
 
 format:
   html:
-    theme:
-      light: cosmo
-      dark: darkly
+    theme: cosmo
     toc: true
     code-fold: true
     code-summary: "Show the code"
     self-contained: true
-    html-math-method: mathjax
+    html-math-method: katex

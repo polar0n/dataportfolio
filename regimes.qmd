@@ -2,16 +2,12 @@
 title: "Volatility Regime Detection: HMM vs. EWMA"
 author: "Igor Papuc"
 date: "2026-04-24"
-format:
-  html:
-    code-fold: true
-    toc: true
-    theme: cosmo
 ---
 
 ## Introduction
 
 Financial time series exhibit "volatility clustering," where periods of high or low volatility persist.  This project explores two methods for identifying these regimes:
+
 1. **Hidden Markov Models (HMM):** A probabilistic approach that assumes the underlying state (regime) is unobserved but dictates the distribution of returns.
 2. **Exponentially Weighted Moving Average (EWMA):** A reactive approach that weights recent observations more heavily to estimate current variance.
 
@@ -190,5 +186,6 @@ fig.show()
 ## Conclusion
 
 This analysis demonstrates that both EWMA and Student-T HMMs effectively capture volatility clustering in financial assets, but they serve different analytical purposes.
-* **EWMA** is highly reactive and useful for tracking current variance levels based on a sliding window of historical returns.
-* **The HMM** provides a more nuanced probabilistic framework. By tying the mean across states, the model successfully isolates regime shifts solely based on volatility changes (spread), offering a robust signal for identifying periods of structural market stress (High Vol Likelihood).
+
+ * **EWMA** is highly reactive and useful for tracking current variance levels based on a sliding window of historical returns.
+ * **The HMM** provides a more nuanced probabilistic framework. By tying the mean across states, the model successfully isolates regime shifts solely based on volatility changes (spread), offering a robust signal for identifying periods of structural market stress (High Vol Likelihood).
