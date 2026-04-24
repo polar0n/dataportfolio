@@ -6,10 +6,10 @@ date: "2026-04-24"
 
 ## Introduction
 
-Financial time series exhibit "volatility clustering," where periods of high or low volatility persist.  This project explores two methods for identifying these regimes:
+Financial time series exhibit "volatility clustering," where periods of high or low volatility persist. This project explores two methods for identifying these regimes:
 
-1. **Hidden Markov Models (HMM):** A probabilistic approach that assumes the underlying state (regime) is unobserved but dictates the distribution of returns.
-2. **Exponentially Weighted Moving Average (EWMA):** A reactive approach that weights recent observations more heavily to estimate current variance.
+1.  **Hidden Markov Models (HMM):** A probabilistic approach that assumes the underlying state (regime) is unobserved but dictates the distribution of returns.
+2.  **Exponentially Weighted Moving Average (EWMA):** A reactive approach that weights recent observations more heavily to estimate current variance.
 
 ## Setup and Data Acquisition
 
@@ -75,11 +75,10 @@ The log-likelihood for the Student-T distribution is defined as:
 $$ \ln \mathcal{L}(\mu, \sigma, \nu) = \sum_{i=1}^{n} \ln \left( \frac{\Gamma(\frac{\nu+1}{2})}{\Gamma(\frac{\nu}{2}) \sqrt{\nu\pi}\sigma} \left( 1 + \frac{1}{\nu} \left( \frac{x_i - \mu}{\sigma} \right)^2 \right)^{-\frac{\nu+1}{2}} \right) $$
 
 ### Estimating with a Tied Mean
+
 In this analysis, we estimate the HMM using a **tied mean** ($\mu_1 = \mu_2 = \bar{\mu}$). This restriction is applied because regime shifts in financial returns are primarily characterized by changes in **dispersion (volatility)** rather than shifts in the expected return, which typically remains near zero. By tying the mean, the model is forced to differentiate states solely based on the "spread" or scale of the distribution.
 
-The tied mean $\hat{\mu}$ is estimated during the M-step of the Expectation-Maximization (EM) algorithm:
-$$\hat{\mu} = \frac{\sum_{t=1}^T \sum_{k=1}^K \gamma_{t,k} w_{t,k} x_t}{\sum_{t=1}^T \sum_{k=1}^K \gamma_{t,k} w_{t,k}}$$
-where $\gamma_{t,k}$ is the posterior probability of being in state $k$ at time $t$, and $w_{t,k}$ is the weight associated with the Student-T distribution's scale-mixture representation.
+The tied mean $\hat{\mu}$ is estimated during the M-step of the Expectation-Maximization (EM) algorithm: $$\hat{\mu} = \frac{\sum_{t=1}^T \sum_{k=1}^K \gamma_{t,k} w_{t,k} x_t}{\sum_{t=1}^T \sum_{k=1}^K \gamma_{t,k} w_{t,k}}$$ where $\gamma_{t,k}$ is the posterior probability of being in state $k$ at time $t$, and $w_{t,k}$ is the weight associated with the Student-T distribution's scale-mixture representation.
 
 ```{python}
 # Fit Student-T HMM with tied mean
@@ -98,9 +97,13 @@ for i in range(r_roll.shape[0]):
     ces1[i] = student_tll(subset, mean=thmm.means[0], std=np.sqrt(thmm.vars[0]), df=thmm.df[0])
     ces2[i] = student_tll(subset, mean=thmm.means[1], std=np.sqrt(thmm.vars[1]), df=thmm.df[1])
 
-ces1_pd = pd.Series(ces1, index=roll_index)
-ces2_pd = pd.Series(ces2, index=roll_index)
-ces_regimes = pd.Series(np.array(ces1 < ces2, dtype=np.int16), index=roll_index)
+if thmm.vars[0] < thmm.vars[1]:
+    ces1_pd = pd.Series(ces1, index=roll_index)
+    ces2_pd = pd.Series(ces2, index=roll_index)
+else:
+    ces1_pd = pd.Series(ces2, index=roll_index)
+    ces2_pd = pd.Series(ces1, index=roll_index)
+ces_regimes = pd.Series(np.array(ces1 < ces2, dtype=np.int8), index=roll_index)
 
 # Prepare for plotting spans
 drop_i = [a[0] for a, b in it.pairwise(ces_regimes.dropna().iloc[1:].items()) if a[1] == b[1]]
@@ -109,9 +112,7 @@ ces_catregime = ces_regimes.drop(index=drop_i).dropna()
 
 ## EWMA Volatility Analysis
 
-The Exponentially Weighted Moving Average (EWMA) provides a reactive estimate of volatility $\sigma^2_t$:
-$$\sigma^2_t = \lambda \sigma^2_{t-1} + (1 - \lambda) r^2_{t-1}$$
-where $\lambda = 0.94$ is the standard decay factor for daily data.
+The Exponentially Weighted Moving Average (EWMA) provides a reactive estimate of volatility $\sigma^2_t$: $$\sigma^2_t = \lambda \sigma^2_{t-1} + (1 - \lambda) r^2_{t-1}$$ where $\lambda = 0.94$ is the standard decay factor for daily data.
 
 ```{python}
 m = 50
@@ -187,5 +188,5 @@ fig.show()
 
 This analysis demonstrates that both EWMA and Student-T HMMs effectively capture volatility clustering in financial assets, but they serve different analytical purposes.
 
- * **EWMA** is highly reactive and useful for tracking current variance levels based on a sliding window of historical returns.
- * **The HMM** provides a more nuanced probabilistic framework. By tying the mean across states, the model successfully isolates regime shifts solely based on volatility changes (spread), offering a robust signal for identifying periods of structural market stress (High Vol Likelihood).
+- **EWMA** is highly reactive and useful for tracking current variance levels based on a sliding window of historical returns.
+- **The HMM** provides a more nuanced probabilistic framework. By tying the mean across states, the model successfully isolates regime shifts solely based on volatility changes (spread), offering a robust signal for identifying periods of structural market stress (High Vol Likelihood).

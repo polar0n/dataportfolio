@@ -6,8 +6,8 @@ website:
   title: "Market Experiments"
   navbar:
     left:
-      - href: regimes.qmd
-        text: Home
+      # - href: index.qmd
+      #   text: Home
       - text: Projects
         menu:
           - href: regimes.qmd
