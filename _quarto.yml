@@ -1,0 +1,24 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Market Experiments"
+  navbar:
+    left:
+      - href: index.qmd
+      - text: Projects
+        menu:
+          - href: regimes.qmd
+          - href: pairs.qmd
+
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    toc: true
+    code-fold: true
+    code-summary: "Show the code"
+    self-contained: true
+    html-math-method: mathjax

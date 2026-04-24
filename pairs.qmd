@@ -1,0 +1,152 @@
+---
+title: "Dynamic Pair Tracking: Standard vs. Robust Kalman Filters"
+author: "Igor Papuc"
+date: "2026-04-24"
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    toc: true
+    code-fold: true
+    code-summary: "Show the code"
+    self-contained: true
+    html-math-method: katex
+---
+
+## Introduction: Why Kalman Filters for Pairs?
+The shift from tracking a single stock to tracking **correlated stocks** is where the Kalman Filter moves from being a simple "denoiser" to a powerful **alpha-generating tool**. In quantitative finance, this is known as **Dynamic Pairs Trading** or Statistical Arbitrage. When tracking two correlated stocks (e.g., Coca-Cola vs. Pepsi), the **relationship** between them is a measurable physical-like law. Unlike a simple rolling OLS, the Kalman Filter treats the relationship ($\beta$) as a hidden state that drifts over time, allowing the model to adapt without the "lag" associated with fixed-window moving averages.
+
+```{python}
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from filterpy.kalman import KalmanFilter
+import helpers as hlp
+from helpers import download_close_data
+
+start, end = "2015-01-01", "2024-01-01"
+TICKER_1, TICKER_2 = "PEP", "KO"
+prices = download_close_data((TICKER_1, TICKER_2,), start, end, interval="1d")
+
+fig_init = go.Figure()
+fig_init.add_trace(go.Scatter(x=prices.index, y=prices[TICKER_1], name=TICKER_1))
+fig_init.add_trace(go.Scatter(x=prices.index, y=prices[TICKER_2], name=TICKER_2))
+fig_init.update_layout(
+    title="Initial Price Comparison",
+    template="plotly_white",
+    hovermode="x unified",
+    xaxis_title="Date",
+    yaxis_title="Price (USD)"
+)
+fig_init.show()
+```
+
+## 1. The Measurement Logic: Log-Price Linearity
+In this model, we use the **log-prices** of the assets. This transformation is critical because log-returns are closer to being stationary than raw price changes. Furthermore, the resulting $\beta$ represents the percentage change in Stock A for a 1% change in Stock B, making the hedge ratio unitless and stable across different price regimes.
+
+The state-space representation is defined as:
+$$\ln(P_{A,t}) = \beta_t \ln(P_{B,t}) + \alpha_t + \epsilon_t$$
+
+## 2. Standard Kalman Filter Implementation
+We initialize the filter to track two states: the slope ($\beta$) and the intercept ($\alpha$).
+
+```{python}
+def init_kf():
+    kf = KalmanFilter(dim_x=2, dim_z=1)
+    kf.F = np.eye(2)
+    kf.x = [[1.0], [0.0]]
+    kf.P = np.eye(2) * 10.0
+    kf.R = np.array([[0.001]])
+    kf.Q = np.eye(2) * 1e-9
+    return kf
+
+kf = init_kf()
+res_list = []
+
+for p1, p2 in prices.to_numpy():
+    kf.predict()
+    H = np.array([[np.log(p2), 1.0]])
+    kf.update(z=np.log(p1), H=H)
+    res_list.append({
+        "Beta": kf.x[0,0],
+        "Spread": kf.y[0,0],
+        "ErrorV": np.sqrt(kf.S[0,0]), # Innovation Standard Deviation
+        "EstVar": np.sqrt(kf.P[0,0])
+    })
+
+spread_pd = pd.DataFrame(res_list, index=prices.index)
+spread_pd.iloc[0:5] = np.nan
+```
+
+## 3. Visualizing the Spread and Confidence Intervals
+We track the **Innovation Residual** ($y_t = z_t - Hx_t$), which represents the "Spread". We use the **Innovation Covariance** ($S$) to define the confidence bands:
+
+* **$1\sigma$ (Green):** Normal market noise.
+* **$2\sigma$ (Grey):** Statistical significance; spikes suggest potential trade entry.
+
+```{python}
+fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05)
+
+# Price Subplot
+fig.add_trace(go.Scatter(x=prices.index, y=np.log(prices[TICKER_1]), name=f"log({TICKER_1})", line=dict(color="red")), row=1, col=1)
+fig.add_trace(go.Scatter(x=prices.index, y=np.log(prices[TICKER_2]), name=f"log({TICKER_2})", line=dict(color="blue")), row=1, col=1)
+
+# Spread Subplot
+fig.add_trace(go.Scatter(x=spread_pd.index, y=spread_pd["Spread"], name="Spread", line=dict(color="black", width=1.5)), row=2, col=1)
+
+# 2-Sigma Confidence Band (Grey)
+fig.add_trace(go.Scatter(
+    x=pd.concat([spread_pd.index.to_series(), spread_pd.index.to_series()[::-1]]),
+    y=pd.concat([spread_pd["Spread"] + 2*spread_pd["ErrorV"], (spread_pd["Spread"] - 2*spread_pd["ErrorV"])[::-1]]),
+    fill='toself', fillcolor='rgba(128,128,128,0.2)', line=dict(color='rgba(255,255,255,0)'), name="2-Sigma", hoverinfo='skip'
+), row=2, col=1)
+
+# 1-Sigma Confidence Band (Green)
+fig.add_trace(go.Scatter(
+    x=pd.concat([spread_pd.index.to_series(), spread_pd.index.to_series()[::-1]]),
+    y=pd.concat([spread_pd["Spread"] + spread_pd["ErrorV"], (spread_pd["Spread"] - spread_pd["ErrorV"])[::-1]]),
+    fill='toself', fillcolor='rgba(0,255,0,0.15)', line=dict(color='rgba(255,255,255,0)'), name="1-Sigma", hoverinfo='skip'
+), row=2, col=1)
+
+fig.update_layout(height=800, template="plotly_white", title="Spread and Divergence Indicators", xaxis2_title="Date")
+fig.update_yaxes(title_text="Log Price", row=1, col=1)
+fig.update_yaxes(title_text="Innovation Residual (y)", row=2, col=1)
+fig.show()
+```
+
+## 4. Robustness: The $\lambda$ Weighting Factor
+Standard Kalman Filters assume Gaussian noise. However, financial markets suffer from **leptokurtosis** (fat tails), where outliers like flash crashes can cause $\beta$ to jump erratically. The **Robust Kalman Filter** introduces a weight, $\lambda \in [0, 1]$:
+
+* **$\lambda \approx 1$:** Measurement is consistent; trust it fully.
+* **$\lambda \to 0$:** Measurement is likely an outlier; down-weight its influence on $\beta$.
+
+```{python}
+rkf = hlp.RobustKalmanFilter(dim_x=2, dim_z=1)
+rkf.F, rkf.x, rkf.P, rkf.R, rkf.Q = np.eye(2), np.array([[1.0], [0.0]]), np.eye(2)*10, np.array([[0.001]]), np.eye(2)*1e-9
+
+rob_list = []
+for p1, p2 in prices.to_numpy():
+    rkf.predict()
+    H = np.array([[np.log(p2), 1.0]])
+    rkf.update_robust(z=np.log(p1), H=H)
+    rob_list.append({"Beta": rkf.x[0,0], "Lambda": rkf.lam, "Spread": rkf.y[0,0]})
+
+r_spread_pd = pd.DataFrame(rob_list, index=prices.index)
+
+# Plotting Beta Stability
+fig_beta = go.Figure()
+fig_beta.add_trace(go.Scatter(x=spread_pd.index, y=spread_pd["Beta"], name="Standard Beta"))
+fig_beta.add_trace(go.Scatter(x=r_spread_pd.index, y=r_spread_pd["Beta"], name="Robust Beta"))
+fig_beta.update_layout(
+    title="Hedge Ratio Stability: Standard vs. Robust",
+    template="plotly_white",
+    xaxis_title="Date",
+    yaxis_title="Hedge Ratio (Beta)"
+)
+fig_beta.show()
+```
+
+## Conclusion
+The Robust Kalman Filter effectively "ignores" market noise that would otherwise force a standard model to over-adjust its hedge ratio. By monitoring the variance of $\lambda$, we can even create a secondary **regime-detection signal**—low $\lambda$ periods correspond to market dislocations where pair correlations are breaking down.
